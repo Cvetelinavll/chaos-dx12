@@ -1,0 +1,37 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\Users\\cvete\\Desktop\\chaos-dx12\\chaos2hw2\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{4A21657F-14DF-46CA-A4E1-D7C03B94987D}|chaos2hw2\\chaos2hw2.vcxproj|C:\\Users\\cvete\\Desktop\\chaos-dx12\\chaos2hw2\\chaos2hw2\\chaos2hw2.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{4A21657F-14DF-46CA-A4E1-D7C03B94987D}|chaos2hw2\\chaos2hw2.vcxproj|solutionrelative:chaos2hw2\\chaos2hw2.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 0,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "chaos2hw2.cpp",
+              "DocumentMoniker": "C:\\Users\\cvete\\Desktop\\chaos-dx12\\chaos2hw2\\chaos2hw2\\chaos2hw2.cpp",
+              "RelativeDocumentMoniker": "chaos2hw2\\chaos2hw2.cpp",
+              "ToolTip": "C:\\Users\\cvete\\Desktop\\chaos-dx12\\chaos2hw2\\chaos2hw2\\chaos2hw2.cpp",
+              "RelativeToolTip": "chaos2hw2\\chaos2hw2.cpp",
+              "ViewState": "AgIAAAYAAABAZGZmZiYnwB4AAAAWAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2026-10-09T09:49:52.69Z",
+              "EditorCaption": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
