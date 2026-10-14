@@ -21,8 +21,8 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{4a21657f-14df-46ca-a4e1-d7c03b94987d}</ProjectGuid>
-    <RootNamespace>chaos2hw2</RootNamespace>
+    <ProjectGuid>{7e76c606-3635-4913-8ed4-54e96760cfc2}</ProjectGuid>
+    <RootNamespace>DX12Renderer</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -127,7 +127,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="chaos2hw2.cpp" />
+    <ClCompile Include="DX12Renderer.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

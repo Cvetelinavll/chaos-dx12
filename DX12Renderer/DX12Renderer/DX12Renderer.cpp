@@ -10,7 +10,7 @@ int main()
 	if (SUCCEEDED(hr))
 	{
 		IDXGIAdapter1* adapter = nullptr;
-		for (UINT adapterIndx = 0;  DXGI_ERROR_NOT_FOUND != dxgiFactory->EnumAdapters1(adapterIndx, &adapter); adapterIndx++)
+		for (UINT adapterIndx = 0; DXGI_ERROR_NOT_FOUND != dxgiFactory->EnumAdapters1(adapterIndx, &adapter); adapterIndx++)
 		{
 			DXGI_ADAPTER_DESC1 desc;
 			hr = adapter->GetDesc1(&desc);
@@ -27,3 +27,4 @@ int main()
 	}
 	return 0;
 }
+
