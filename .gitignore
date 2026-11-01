@@ -20,7 +20,6 @@
 # Compiled Dynamic libraries
 *.so
 *.dylib
-*.dll
 *.so.*
 
 # Fortran module files
@@ -31,7 +30,6 @@
 *.lai
 *.la
 *.a
-*.lib
 
 # Executables
 *.exe
@@ -78,3 +76,11 @@ Release/
 *.obj
 
 *.ppm
+
+qtgen/
+
+bin/
+obj/
+src/qtgen/
+scripts/generated_prebuild.bat
+third_party/
