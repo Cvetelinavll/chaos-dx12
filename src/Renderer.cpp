@@ -1,31 +1,24 @@
 #include "Renderer.h"
-
-
+#include <iostream>
+#include <fstream>
+#include <cassert>
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3d12.lib")
-
-Renderer::~Renderer()
-{
-	CloseHandle(fenceEvent);
-	fence->Release();
-	readbackBuffer->Release();
-	rtvHeap->Release();
-	renderTarget->Release();
-	commandList->Release();
-	commandAllocator->Release();
-	commandQueue->Release();
-	device->Release();
-	adapter->Release();
-	factory->Release();
-}
 
 void Renderer::render()
 {
 	prepareForRendering();
+	const int framesCount = 3;
+	for (size_t i = 0; i < framesCount; i++)
+	{
+		renderFrame();
+	}
+	cleanUp();
 }
 
 void Renderer::prepareForRendering()
 {
+	enableDebugLayer();
 	createDevice();
 	createCommandsManagers();
 	createGPUTexture();
@@ -39,20 +32,25 @@ void Renderer::createDevice()
 	HRESULT hr = CreateDXGIFactory1(IID_PPV_ARGS(&factory));
 	assert(SUCCEEDED(hr));
 
-	for (UINT adapterIndx = 0; DXGI_ERROR_NOT_FOUND != factory->EnumAdapters1(adapterIndx, &adapter); adapterIndx++)
+	for (UINT adapterIndx = 0; SUCCEEDED(factory->EnumAdapters1(adapterIndx, &adapter)); adapterIndx++)
 	{
 		DXGI_ADAPTER_DESC1 desc;
 		adapter->GetDesc1(&desc);
 
-		if (SUCCEEDED(D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device))))
+		if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
+		{
+			continue;
+		}
+
+		hr = D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device));
+		if(SUCCEEDED(hr))
 		{
 			std::wcout << L"Device created on: " << desc.Description << L"\n";
 			break;
 		}
-		adapter->Release();
-		adapter = nullptr;
+		std::wcout << L"Device creation failed on: " << desc.Description<< L", HRESULT 0x" << std::hex << hr << std::dec << L"\n";
 	}
-	assert(adapter);
+	assert(device != nullptr);
 }
 
 void Renderer::createCommandsManagers()
@@ -67,10 +65,7 @@ void Renderer::createCommandsManagers()
 	hr = device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAllocator));
 	assert(SUCCEEDED(hr));
 
-	hr = device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocator, nullptr, IID_PPV_ARGS(&commandList));
-	assert(SUCCEEDED(hr));
-
-	hr = commandList->Close();
+	hr = device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocator.Get(), nullptr, IID_PPV_ARGS(&commandList));
 	assert(SUCCEEDED(hr));
 }
 
@@ -104,24 +99,13 @@ void Renderer::createRenderTargetView()
 	assert(SUCCEEDED(hr));
 
 	rtvHandle = rtvHeap->GetCPUDescriptorHandleForHeapStart();
-	device->CreateRenderTargetView(renderTarget, nullptr, rtvHandle);
+	device->CreateRenderTargetView(renderTarget.Get(), nullptr, rtvHandle);
 }
 
 void Renderer::generateConstColorTexture(const float color[4])
 {
 	commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
 	commandList->ClearRenderTargetView(rtvHandle, color, 0, nullptr);
-}
-
-void Renderer::generateImage(const float color[4], const std::string& fileName)
-{
-	resetCommandList();
-	generateConstColorTexture(color);
-	copyTextureToReadbackBuffer();
-	executeCommandList();
-	waitForGPU();
-	saveImage(fileName);
-	std::cout << "Saved " << fileName << "\n";
 }
 
 void Renderer::createReadbackBuffer()
@@ -156,33 +140,24 @@ void Renderer::createFence()
 	assert(fenceEvent);
 }
 
-void Renderer::resetCommandList()
-{
-	HRESULT hr = commandAllocator->Reset();
-	assert(SUCCEEDED(hr));
-
-	hr = commandList->Reset(commandAllocator, nullptr);
-	assert(SUCCEEDED(hr));
-}
-
 void Renderer::copyTextureToReadbackBuffer()
 {
 	D3D12_RESOURCE_BARRIER barrier = {};
 	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
 	barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-	barrier.Transition.pResource = renderTarget;
+	barrier.Transition.pResource = renderTarget.Get();
 	barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
 	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
 	commandList->ResourceBarrier(1,& barrier);
 
 	D3D12_TEXTURE_COPY_LOCATION source = {};
-	source.pResource = renderTarget;
+	source.pResource = renderTarget.Get();
 	source.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
 	source.SubresourceIndex = 0;
 
 	D3D12_TEXTURE_COPY_LOCATION destination = {};
-	destination.pResource = readbackBuffer;
+	destination.pResource = readbackBuffer.Get();
 	destination.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
 	destination.PlacedFootprint = footprint;
 
@@ -195,25 +170,26 @@ void Renderer::copyTextureToReadbackBuffer()
 
 void Renderer::executeCommandList()
 {
-	const HRESULT hr = commandList->Close();
+	HRESULT hr = commandList->Close();
 	assert(SUCCEEDED(hr));
 
-	ID3D12CommandList* lists[] = {commandList};
+	ID3D12CommandList* lists[] = {commandList.Get()};
 	commandQueue->ExecuteCommandLists(_countof(lists), lists);
+	
+	hr = commandQueue->Signal(fence.Get(), fenceValue);
+	assert(SUCCEEDED(hr));
 }
 
 void Renderer::waitForGPU()
 {
-	++fenceValue;
-	HRESULT hr = commandQueue->Signal(fence, fenceValue);
-	assert(SUCCEEDED(hr));
-
 	if (fence->GetCompletedValue() < fenceValue)
 	{
-		hr = fence->SetEventOnCompletion(fenceValue, fenceEvent);
+		HRESULT hr = fence->SetEventOnCompletion(fenceValue, fenceEvent);
 		assert(SUCCEEDED(hr));
+
 		WaitForSingleObject(fenceEvent, INFINITE);
 	}
+	++fenceValue;
 }
 
 void Renderer::saveImage(const std::string& fileName)
@@ -222,21 +198,91 @@ void Renderer::saveImage(const std::string& fileName)
 	const HRESULT hr = readbackBuffer->Map(0, nullptr, &renderTData);
 	assert(SUCCEEDED(hr));
 
-	std::ofstream file(fileName, std::ios::binary);
+	std::ofstream file(fileName, std::ios::out|std::ios::binary);
 	assert(file);
 
 	file << "P3\n" << width << " " << height << "\n255\n";
 
-	const unsigned char* bytes = static_cast<const unsigned char*>(renderTData) + footprint.Offset;
+	const UINT channelsCount = 4;
 	for (UINT row = 0; row < height; row++)
 	{
-		const unsigned char* rowStart = bytes + row * footprint.Footprint.RowPitch;
-		for (UINT column = 0; column < width; column++)
+		const uint8_t* rowData = static_cast<const uint8_t*>(renderTData) + footprint.Offset + row * footprint.Footprint.RowPitch;
+		for (UINT column = 0; column < width; ++column)
 		{
-			file.write(reinterpret_cast<const char*>(rowStart+column*4),3);
+			const uint8_t* pixel = rowData + column * channelsCount;
+			for (UINT channel = 0; channel < channelsCount - 1; ++channel)
+			{
+				file << static_cast<int>(pixel[channel]) << ' ';
+			}
 		}
+		file << '\n';
 	}
 
-	D3D12_RANGE nothingWritten = {0,0};
-	readbackBuffer->Unmap(0, &nothingWritten);
+	file.close();
+	readbackBuffer->Unmap(0, nullptr);
+}
+
+void Renderer::renderFrame()
+{
+	const float colors[3][4] =
+	{
+		{ 1.0f, 0.0f, 0.0f, 1.0f },
+		{ 0.0f, 1.0f, 0.0f, 1.0f },
+		{ 0.0f, 0.0f, 1.0f, 1.0f },
+	};
+	const float* color = colors[frameIndex % 3];
+
+	generateConstColorTexture(color);
+	copyTextureToReadbackBuffer();
+	executeCommandList();
+	waitForGPU();
+	frameEnd();
+}
+
+void Renderer::cleanUp()
+{
+	if (fenceEvent)
+	{
+		CloseHandle(fenceEvent);
+		fenceEvent = nullptr;
+	}
+
+	fence.Reset();
+	readbackBuffer.Reset();
+	rtvHeap.Reset();
+	renderTarget.Reset();
+	commandList.Reset();
+	commandAllocator.Reset();
+	commandQueue.Reset();
+	device.Reset();
+	adapter.Reset();
+	factory.Reset();
+}
+
+void Renderer::frameEnd()
+{
+	saveImage("frame_" + std::to_string(frameIndex) + ".ppm");
+
+	HRESULT hr = commandAllocator->Reset();
+	assert(SUCCEEDED(hr));
+
+	hr = commandList->Reset(commandAllocator.Get(), nullptr);
+	assert(SUCCEEDED(hr));
+
+	++frameIndex;
+}
+
+void Renderer::enableDebugLayer()
+{
+#ifdef _DEBUG
+	ComPtr<ID3D12Debug> debugController;
+	if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController))))
+	{
+		debugController->EnableDebugLayer();
+	}
+	else
+	{
+		std::wcout << L"D3D12 debug layer is not available\n";
+	}
+#endif
 }
