@@ -76,3 +76,5 @@ Release/
 *.pdb
 *.ilk
 *.obj
+
+*.ppm

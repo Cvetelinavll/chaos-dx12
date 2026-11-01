@@ -4,6 +4,7 @@ int main()
 {
 	Renderer renderer;
 	
-	return renderer.render() ? 0 : 1;
-}
+	renderer.render();
 
+	return 0;
+}
