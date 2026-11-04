@@ -1,20 +1,8 @@
 #include "Renderer.h"
 #include <iostream>
-#include <fstream>
 #include <cassert>
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3d12.lib")
-
-void Renderer::render()
-{
-	prepareForRendering();
-	const int framesCount = 3;
-	for (size_t i = 0; i < framesCount; i++)
-	{
-		renderFrame();
-	}
-	cleanUp();
-}
 
 void Renderer::prepareForRendering()
 {
@@ -192,77 +180,44 @@ void Renderer::waitForGPU()
 	++fenceValue;
 }
 
-void Renderer::saveImage(const std::string& fileName)
+void Renderer::frameBegin()
 {
-	void* renderTData = nullptr;
-	const HRESULT hr = readbackBuffer->Map(0, nullptr, &renderTData);
-	assert(SUCCEEDED(hr));
+	float frameCoef = static_cast<float>(frameIndex % 1000) / 1000.0f;
 
-	std::ofstream file(fileName, std::ios::out|std::ios::binary);
-	assert(file);
-
-	file << "P3\n" << width << " " << height << "\n255\n";
-
-	const UINT channelsCount = 4;
-	for (UINT row = 0; row < height; row++)
-	{
-		const uint8_t* rowData = static_cast<const uint8_t*>(renderTData) + footprint.Offset + row * footprint.Footprint.RowPitch;
-		for (UINT column = 0; column < width; ++column)
-		{
-			const uint8_t* pixel = rowData + column * channelsCount;
-			for (UINT channel = 0; channel < channelsCount - 1; ++channel)
-			{
-				file << static_cast<int>(pixel[channel]) << ' ';
-			}
-		}
-		file << '\n';
-	}
-
-	file.close();
-	readbackBuffer->Unmap(0, nullptr);
+	rendColor[0] = frameCoef;
+	rendColor[1] = 1.f - frameCoef;
+	rendColor[2] = 0.f;
+	rendColor[3] = 1.f;
 }
 
 void Renderer::renderFrame()
 {
-	const float colors[3][4] =
-	{
-		{ 1.0f, 0.0f, 0.0f, 1.0f },
-		{ 0.0f, 1.0f, 0.0f, 1.0f },
-		{ 0.0f, 0.0f, 1.0f, 1.0f },
-	};
-	const float* color = colors[frameIndex % 3];
-
-	generateConstColorTexture(color);
+	frameBegin();
+	generateConstColorTexture(rendColor);
 	copyTextureToReadbackBuffer();
 	executeCommandList();
 	waitForGPU();
 	frameEnd();
 }
 
-void Renderer::cleanUp()
+void Renderer::copyFrame(uint8_t* destination, size_t destinationRowPitch)
 {
-	if (fenceEvent)
+	void* mapped = nullptr;
+	const HRESULT hr = readbackBuffer->Map(0, nullptr, &mapped);
+	assert(SUCCEEDED(hr));
+
+	const uint8_t* source = static_cast<const uint8_t*>(mapped) + footprint.Offset;
+	const size_t rowSize = static_cast<size_t>(width) * 4;
+	for (UINT row = 0; row < height; ++row)
 	{
-		CloseHandle(fenceEvent);
-		fenceEvent = nullptr;
+		memcpy(destination + row * destinationRowPitch, source + row * footprint.Footprint.RowPitch, rowSize);
 	}
 
-	fence.Reset();
-	readbackBuffer.Reset();
-	rtvHeap.Reset();
-	renderTarget.Reset();
-	commandList.Reset();
-	commandAllocator.Reset();
-	commandQueue.Reset();
-	device.Reset();
-	adapter.Reset();
-	factory.Reset();
+	readbackBuffer->Unmap(0, nullptr);
 }
 
 void Renderer::frameEnd()
 {
-	saveImage("frame_" + std::to_string(frameIndex) + ".ppm");
-
 	HRESULT hr = commandAllocator->Reset();
 	assert(SUCCEEDED(hr));
 
@@ -285,4 +240,26 @@ void Renderer::enableDebugLayer()
 		std::wcout << L"D3D12 debug layer is not available\n";
 	}
 #endif
+}
+
+void Renderer::stopRendering()
+{
+	const HRESULT hr = commandQueue->Signal(fence.Get(), fenceValue);
+	assert(SUCCEEDED(hr));
+	waitForGPU();
+}
+
+UINT Renderer::getWidth() const 
+{ 
+	return width; 
+}
+
+UINT Renderer::getHeight() const 
+{ 
+	return height; 
+}
+
+UINT64 Renderer::getFrameIdx() const 
+{ 
+	return frameIndex; 
 }

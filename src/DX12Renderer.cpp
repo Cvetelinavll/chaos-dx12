@@ -1,10 +1,14 @@
-#include "Renderer.h"
+#include <QApplication>
+#include "MyApp.h"
 
-int main()
+int main(int argc, char* argv[])
 {
-	Renderer renderer;
-	
-	renderer.render();
+    QApplication qtApp(argc, argv);
+    MyApp app;
 
-	return 0;
+	if (false==app.init())
+	{
+		return 1;
+	}
+	return qtApp.exec();
 }

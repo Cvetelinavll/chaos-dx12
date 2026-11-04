@@ -3,6 +3,9 @@ import os, sys
 moc_cmd = "third_party\\Qt6\\bin\\moc.exe {} -o {}\n"
 
 moc_files = [
+    "MyApp",
+    "MainWindow",
+    "ViewportWidget",
 ]
 
 prefix = "src\\"

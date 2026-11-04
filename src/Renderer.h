@@ -9,9 +9,15 @@ using Microsoft::WRL::ComPtr;
 class Renderer 
 {
 public:
-	void render();
-private:
     void prepareForRendering();
+    void renderFrame();
+    void copyFrame(uint8_t* destination, size_t destinationRowPitch);
+    void stopRendering();
+
+    UINT getWidth() const;
+    UINT getHeight() const;
+    UINT64 getFrameIdx() const;
+private:
     void createDevice();
     void createCommandsManagers();
     void createGPUTexture();
@@ -19,14 +25,11 @@ private:
     void createReadbackBuffer();
     void createFence();
 
+    void frameBegin();
     void generateConstColorTexture(const float color[4]);
     void copyTextureToReadbackBuffer();
     void executeCommandList();
     void waitForGPU();
-    void saveImage(const std::string& fileName);
-
-    void renderFrame();
-    void cleanUp();
     void frameEnd();
 
     void enableDebugLayer();
@@ -58,4 +61,5 @@ private:
     UINT64 fenceValue = 1;
 
     UINT64 frameIndex = 0;
+    float rendColor[4];
 };
