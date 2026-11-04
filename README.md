@@ -6,10 +6,11 @@ DirectX 12 renderer developed during the Chaos DirectX 12 Ray Tracing Course 202
 
 - Selects the first hardware GPU adapter that supports Direct3D 12 (feature level 11_0), skipping software adapters
 - Enables the D3D12 debug layer in Debug builds
-- Creates a direct command queue, command allocator and graphics command list
-- Creates an 800x600 render target texture with a render target view
-- Renders frames by clearing the render target to a color that changes with the frame index (red, green, blue)
-- Copies each frame to a readback buffer, waits for the GPU with a fence and saves it as a PPM image
+- Renders frames on the GPU into an 800x600 render target
+- Qt main window with a viewport that shows each rendered frame
+- Rendering loop driven by a QTimer, running whenever the Qt event loop is idle
+- Frame color changes with the frame index: interpolates from green to red every 1000 frames
+- FPS counter in the status bar, updated every second by a separate QTimer
 
 ## Requirements
 
@@ -18,7 +19,6 @@ DirectX 12 renderer developed during the Chaos DirectX 12 Ray Tracing Course 202
 - Visual Studio 2022 with the "Desktop development with C++" workload
 - Python 3, available as `python` in PATH (used by the build events)
 - Qt 6.11.3 for MSVC 2022 64-bit
-- Optional, for the D3D12 debug layer: the Windows optional feature "Graphics Tools"
 
 ## Setup
 
@@ -35,20 +35,22 @@ qml
 ## Building
 
 1. Open `DX12Renderer.sln`
-2. Select `Debug | x64` or `Release | x64`
+2. Select `Release | x64` or `Debug | x64`
 3. Build > Build Solution
 
 - C++ standard: C++17
-- Output: `bin\Debug` or `bin\Release`
-- Intermediate files: `obj\x64\Debug` or `obj\x64\Release`
-- The pre-build event runs Qt's moc through `scripts\gen_prebuild_cmd.py`
+- Output: `bin\Release` or `bin\Debug`
+- Intermediate files: `obj\x64\Release` or `obj\x64\Debug`
+- The pre-build event runs Qt's moc for the classes listed in `scripts\gen_prebuild_cmd.py` and writes the results to `src\qtgen`
 - The post-build event copies the Qt DLLs and the `platforms` plugin next to the executable through `scripts\postbuild.py`
+
+When adding a new class with `Q_OBJECT`, add its header name to `moc_files` in `scripts\gen_prebuild_cmd.py`, build once, then add the generated `src\qtgen\moc_<Name>.cpp` to the project.
 
 ## Running
 
-From Visual Studio: Debug > Start Debugging (F5). D3D12 debug layer messages appear in the Output window.
+From Visual Studio: Debug > Start Without Debugging (Ctrl+F5). Use Release for a representative FPS. In Debug, start with F5 to see D3D12 debug layer messages in the Output window.
 
-The program renders three frames and saves them as `frame_0.ppm`, `frame_1.ppm` and `frame_2.ppm` in the working directory: the repository root when started from Visual Studio, otherwise the folder it is started from. PPM images can be opened with GIMP or IrfanView.
+The window shows the rendered frames live, with the FPS at the bottom right. Close the window to quit.
 
 The program takes no command line arguments.
 
@@ -58,11 +60,14 @@ Prebuilt executables are available under [Releases](https://github.com/Cvetelina
 
 | Path | Purpose |
 |---|---|
-| `src/DX12Renderer.cpp` | Entry point, runs the renderer |
-| `src/Renderer.h`, `src/Renderer.cpp` | DirectX 12 setup, frame rendering and image output |
+| `src/DX12Renderer.cpp` | Entry point: creates the Qt application and `MyApp` |
+| `src/MyApp.h`, `src/MyApp.cpp` | Links GUI and renderer: rendering loop, FPS calculation, startup and shutdown |
+| `src/MainWindow.h`, `src/MainWindow.cpp` | Main window: viewport and status bar with the FPS |
+| `src/ViewportWidget.h` | Widget that draws the rendered frame |
+| `src/Renderer.h`, `src/Renderer.cpp` | DirectX 12 renderer: setup, frame rendering, copying the frame to the CPU |
 | `scripts/` | Build event scripts (moc, copying Qt DLLs) |
 | `third_party/Qt6/` | Qt 6, copied locally, not in git |
-| `bin/`, `obj/` | Build output, not in git |
+| `bin/`, `obj/`, `src/qtgen/` | Build output and generated files, not in git |
 
 ## Lecture branches
 
@@ -73,3 +78,4 @@ Each lecture is developed in its own branch, based on the previous one. `main` a
 | `lecture-01` | | Enumerate GPU adapters with DXGI |
 | `lecture-02` | v0.2 | Device, command queue, allocator and command list; Renderer class |
 | `lecture-03` | v0.3 | Render target, readback buffer, fence, multiple frames; review fixes; repository restructure; Qt linked |
+| `lecture-04` | v0.4 | Qt main window, viewport, QTimer rendering loop, FPS counter |
