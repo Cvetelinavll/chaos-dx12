@@ -9,13 +9,13 @@ class ViewportWidget:public QWidget
 	Q_OBJECT
 public:
 	explicit ViewportWidget(QWidget* parent = nullptr) :QWidget(parent) {}
-	void updateImage(const QImage& image) 
+	void updateImage(const QImage& newImage) 
 	{
-		this->image = image;
+		this->image = newImage;
 		update();
 	}
 protected:
-	void paintEvent(QPaintEvent* event) override 
+	void paintEvent(QPaintEvent*) override 
 	{
 		QPainter painter(this);
 		painter.drawImage(rect(), image);

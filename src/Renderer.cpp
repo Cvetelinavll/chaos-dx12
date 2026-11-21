@@ -124,8 +124,8 @@ void Renderer::createFence()
 	const HRESULT hr = device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
 	assert(SUCCEEDED(hr));
 
-	fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-	assert(fenceEvent);
+	fenceEvent.Attach(CreateEvent(nullptr, FALSE, FALSE,nullptr));
+	assert(fenceEvent.IsValid());
 }
 
 void Renderer::copyTextureToReadbackBuffer()
@@ -172,10 +172,10 @@ void Renderer::waitForGPU()
 {
 	if (fence->GetCompletedValue() < fenceValue)
 	{
-		HRESULT hr = fence->SetEventOnCompletion(fenceValue, fenceEvent);
+		HRESULT hr = fence->SetEventOnCompletion(fenceValue, fenceEvent.Get());
 		assert(SUCCEEDED(hr));
 
-		WaitForSingleObject(fenceEvent, INFINITE);
+		WaitForSingleObject(fenceEvent.Get(), INFINITE);
 	}
 	++fenceValue;
 }

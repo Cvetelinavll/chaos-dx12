@@ -57,7 +57,7 @@ private:
     D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
 
     ComPtr<ID3D12Fence> fence = nullptr;
-    HANDLE fenceEvent = nullptr;
+    Microsoft::WRL::Wrappers::Event fenceEvent;
     UINT64 fenceValue = 1;
 
     UINT64 frameIndex = 0;
