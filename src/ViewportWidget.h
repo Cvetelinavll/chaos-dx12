@@ -1,6 +1,5 @@
 #pragma once
-#include <QImage>
-#include <QPainter>
+#include <Windows.h>
 #include <QWidget>
 
 
@@ -9,17 +8,9 @@ class ViewportWidget:public QWidget
 	Q_OBJECT
 public:
 	explicit ViewportWidget(QWidget* parent = nullptr) :QWidget(parent) {}
-	void updateImage(const QImage& newImage) 
+
+	HWND getNativeWindowHandle() 
 	{
-		this->image = newImage;
-		update();
+		return reinterpret_cast<HWND>(winId());
 	}
-protected:
-	void paintEvent(QPaintEvent*) override 
-	{
-		QPainter painter(this);
-		painter.drawImage(rect(), image);
-	}
-private:
-	QImage image;
 };

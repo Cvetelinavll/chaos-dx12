@@ -15,7 +15,7 @@ public:
 
 	void setFPS(const int fps);
 
-	void updateViewport(const QImage& image);
+	HWND getViewportHandle() const;
 
 	void closeEvent(QCloseEvent* event)override;
 

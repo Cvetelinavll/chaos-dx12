@@ -37,9 +37,9 @@ void MainWindow::setFPS(const int fps)
     statusFPS->setText(QString::number(fps));
 }
 
-void MainWindow::updateViewport(const QImage & image)
+HWND MainWindow::getViewportHandle() const
 {
-    viewport->updateImage(image);
+    return viewport->getNativeWindowHandle();
 }
 
 void MainWindow::closeEvent(QCloseEvent * event)

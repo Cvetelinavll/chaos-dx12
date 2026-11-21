@@ -4,14 +4,13 @@
 
 bool MyApp::init()
 {
-	renderer.prepareForRendering();
-	frameImage = QImage(renderer.getWidth(), renderer.getHeight(), QImage::Format_RGBA8888);
-
 	if (false==initWindow())
 	{
 		return false;
 	}
 	mainWnd->show();
+
+	renderer.prepareForRendering(mainWnd->getViewportHandle());
 
 	idleTimer = new QTimer(mainWnd);
 	connect(idleTimer, &QTimer::timeout, this, &MyApp::onIdleTick);
@@ -44,9 +43,7 @@ void MyApp::onIdleTick()
 
 void MyApp::renderFrame()
 {
-	renderer.renderFrame();
-	renderer.copyFrame(frameImage.bits(), frameImage.bytesPerLine());
-	mainWnd->updateViewport(frameImage);
+	renderer.renderFrameWithSwapChain();
 }
 
 void MyApp::updateRenderStats()

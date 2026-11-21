@@ -1,17 +1,18 @@
 #include "Renderer.h"
 #include <iostream>
 #include <cassert>
+
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3d12.lib")
 
-void Renderer::prepareForRendering()
+void Renderer::prepareForRendering(HWND hwnd)
 {
 	enableDebugLayer();
 	createDevice();
 	createCommandsManagers();
-	createGPUTexture();
-	createRenderTargetView();
-	createReadbackBuffer();
+	createSwapChain(hwnd);
+	createDescriptorHeapForSwapChain();
+	createRenderTargetViewFromSwapChain();
 	createFence();
 }
 
@@ -55,68 +56,54 @@ void Renderer::createCommandsManagers()
 
 	hr = device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocator.Get(), nullptr, IID_PPV_ARGS(&commandList));
 	assert(SUCCEEDED(hr));
-}
 
-void Renderer::createGPUTexture()
-{
-	texDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-	texDesc.Width = width;
-	texDesc.Height = height;
-	texDesc.DepthOrArraySize = 1;
-	texDesc.MipLevels = 1;
-	texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	texDesc.SampleDesc.Count = 1;
-	texDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-	texDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
-
-	D3D12_HEAP_PROPERTIES heapProps={};
-	heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
-
-	const HRESULT hr = device->CreateCommittedResource(&heapProps, D3D12_HEAP_FLAG_NONE, &texDesc, D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(&renderTarget));
+	hr = commandList->Close();
 	assert(SUCCEEDED(hr));
 }
 
-void Renderer::createRenderTargetView()
+void Renderer::createSwapChain(HWND windowHandle)
+{
+	DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
+	swapChainDesc.Width = width;
+	swapChainDesc.Height = height;
+	swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	swapChainDesc.BufferCount = swapChainBuffersCount;
+	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+	swapChainDesc.SampleDesc.Count = 1;
+
+	ComPtr<IDXGISwapChain1> swapChain1;
+	HRESULT hr = factory->CreateSwapChainForHwnd(commandQueue.Get(), windowHandle, &swapChainDesc, nullptr, nullptr, &swapChain1);
+
+	assert(SUCCEEDED(hr));
+
+	hr = swapChain1->QueryInterface(IID_PPV_ARGS(&swapChain));
+	assert(SUCCEEDED(hr));
+}
+
+void Renderer::createDescriptorHeapForSwapChain()
 {
 	D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
-	rtvHeapDesc.NumDescriptors = 1;
+	rtvHeapDesc.NumDescriptors = swapChainBuffersCount;
 	rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
 	rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
 
-	const HRESULT hr = device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&rtvHeap));
-	assert(SUCCEEDED(hr));
+	assert(SUCCEEDED(device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&rtvHeap))));
 
-	rtvHandle = rtvHeap->GetCPUDescriptorHandleForHeapStart();
-	device->CreateRenderTargetView(renderTarget.Get(), nullptr, rtvHandle);
+	rtvDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 }
 
-void Renderer::generateConstColorTexture(const float color[4])
+void Renderer::createRenderTargetViewFromSwapChain()
 {
-	commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
-	commandList->ClearRenderTargetView(rtvHandle, color, 0, nullptr);
-}
+	for (UINT scBuffIndx = 0; scBuffIndx < 2; scBuffIndx++)
+	{
+		const HRESULT hr = swapChain->GetBuffer(scBuffIndx, IID_PPV_ARGS(&renderTargets[scBuffIndx]));
+		assert(SUCCEEDED(hr));
 
-void Renderer::createReadbackBuffer()
-{
-	UINT64 bufferSize = 0;
-	device->GetCopyableFootprints(&texDesc,0,1,0, &footprint, nullptr, nullptr, &bufferSize);
-
-	D3D12_RESOURCE_DESC bufferDesc = {};
-	bufferDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-	bufferDesc.Width = bufferSize;
-	bufferDesc.Height = 1;
-	bufferDesc.DepthOrArraySize = 1;
-	bufferDesc.MipLevels = 1;
-	bufferDesc.Format = DXGI_FORMAT_UNKNOWN;
-	bufferDesc.SampleDesc.Count = 1;
-	bufferDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-	bufferDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
-
-	D3D12_HEAP_PROPERTIES heapProperties = {};
-	heapProperties.Type = D3D12_HEAP_TYPE_READBACK;
-
-	const HRESULT hr = device->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAG_NONE, &bufferDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&readbackBuffer));
-	assert(SUCCEEDED(hr));
+		rtvHandles[scBuffIndx] = rtvHeap->GetCPUDescriptorHandleForHeapStart();
+		rtvHandles[scBuffIndx].ptr += scBuffIndx * rtvDescriptorSize;
+		device->CreateRenderTargetView(renderTargets[scBuffIndx].Get(), nullptr, rtvHandles[scBuffIndx]);
+	}
 }
 
 void Renderer::createFence()
@@ -126,58 +113,6 @@ void Renderer::createFence()
 
 	fenceEvent.Attach(CreateEvent(nullptr, FALSE, FALSE,nullptr));
 	assert(fenceEvent.IsValid());
-}
-
-void Renderer::copyTextureToReadbackBuffer()
-{
-	D3D12_RESOURCE_BARRIER barrier = {};
-	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-	barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-	barrier.Transition.pResource = renderTarget.Get();
-	barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
-	commandList->ResourceBarrier(1,& barrier);
-
-	D3D12_TEXTURE_COPY_LOCATION source = {};
-	source.pResource = renderTarget.Get();
-	source.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-	source.SubresourceIndex = 0;
-
-	D3D12_TEXTURE_COPY_LOCATION destination = {};
-	destination.pResource = readbackBuffer.Get();
-	destination.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-	destination.PlacedFootprint = footprint;
-
-	commandList->CopyTextureRegion(&destination, 0,0,0,&source, nullptr);
-
-	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_SOURCE;
-	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-	commandList->ResourceBarrier(1,&barrier);
-}
-
-void Renderer::executeCommandList()
-{
-	HRESULT hr = commandList->Close();
-	assert(SUCCEEDED(hr));
-
-	ID3D12CommandList* lists[] = {commandList.Get()};
-	commandQueue->ExecuteCommandLists(_countof(lists), lists);
-	
-	hr = commandQueue->Signal(fence.Get(), fenceValue);
-	assert(SUCCEEDED(hr));
-}
-
-void Renderer::waitForGPU()
-{
-	if (fence->GetCompletedValue() < fenceValue)
-	{
-		HRESULT hr = fence->SetEventOnCompletion(fenceValue, fenceEvent.Get());
-		assert(SUCCEEDED(hr));
-
-		WaitForSingleObject(fenceEvent.Get(), INFINITE);
-	}
-	++fenceValue;
 }
 
 void Renderer::frameBegin()
@@ -190,41 +125,58 @@ void Renderer::frameBegin()
 	rendColor[3] = 1.f;
 }
 
-void Renderer::renderFrame()
+void Renderer::renderFrameWithSwapChain()
 {
 	frameBegin();
-	generateConstColorTexture(rendColor);
-	copyTextureToReadbackBuffer();
-	executeCommandList();
+
+	commandAllocator->Reset();
+	commandList->Reset(commandAllocator.Get(), nullptr);
+
+	D3D12_RESOURCE_BARRIER barrier{};
+	barrier.Transition.pResource = renderTargets[backBufferIdx].Get();
+	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+	commandList->ResourceBarrier(1, &barrier);
+
+	commandList->OMSetRenderTargets(1, &rtvHandles[backBufferIdx], FALSE, nullptr);
+	commandList->ClearRenderTargetView(rtvHandles[backBufferIdx], rendColor, 0, nullptr);
+
+	barrier.Transition.pResource = renderTargets[backBufferIdx].Get();
+	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+	commandList->ResourceBarrier(1, &barrier);
+
+	commandList->Close();
+
+	ID3D12CommandList* ppCommandLists[] = {commandList.Get()};
+	commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
+
+	swapChain->Present(0,0);
+
+
 	waitForGPU();
 	frameEnd();
 }
 
-void Renderer::copyFrame(uint8_t* destination, size_t destinationRowPitch)
+void Renderer::waitForGPU()
 {
-	void* mapped = nullptr;
-	const HRESULT hr = readbackBuffer->Map(0, nullptr, &mapped);
+	const HRESULT hr = commandQueue->Signal(fence.Get(), fenceValue);
 	assert(SUCCEEDED(hr));
 
-	const uint8_t* source = static_cast<const uint8_t*>(mapped) + footprint.Offset;
-	const size_t rowSize = static_cast<size_t>(width) * 4;
-	for (UINT row = 0; row < height; ++row)
+	if (fence->GetCompletedValue() < fenceValue)
 	{
-		memcpy(destination + row * destinationRowPitch, source + row * footprint.Footprint.RowPitch, rowSize);
-	}
+		HRESULT hr = fence->SetEventOnCompletion(fenceValue, fenceEvent.Get());
+		assert(SUCCEEDED(hr));
 
-	readbackBuffer->Unmap(0, nullptr);
+		WaitForSingleObject(fenceEvent.Get(), INFINITE);
+	}
+	++fenceValue;
 }
 
 void Renderer::frameEnd()
 {
-	HRESULT hr = commandAllocator->Reset();
-	assert(SUCCEEDED(hr));
-
-	hr = commandList->Reset(commandAllocator.Get(), nullptr);
-	assert(SUCCEEDED(hr));
-
 	++frameIndex;
+	backBufferIdx = swapChain->GetCurrentBackBufferIndex();
 }
 
 void Renderer::enableDebugLayer()
@@ -244,8 +196,6 @@ void Renderer::enableDebugLayer()
 
 void Renderer::stopRendering()
 {
-	const HRESULT hr = commandQueue->Signal(fence.Get(), fenceValue);
-	assert(SUCCEEDED(hr));
 	waitForGPU();
 }
 

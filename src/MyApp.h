@@ -1,6 +1,6 @@
 #pragma once
-#include <QImage>
 #include "QObject.h"
+#include "QImage.h"
 #include "Renderer.h"
 
 class MainWindow;

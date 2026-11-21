@@ -9,9 +9,8 @@ using Microsoft::WRL::ComPtr;
 class Renderer 
 {
 public:
-    void prepareForRendering();
-    void renderFrame();
-    void copyFrame(uint8_t* destination, size_t destinationRowPitch);
+    void prepareForRendering(HWND hwnd);
+    void renderFrameWithSwapChain();
     void stopRendering();
 
     UINT getWidth() const;
@@ -20,15 +19,12 @@ public:
 private:
     void createDevice();
     void createCommandsManagers();
-    void createGPUTexture();
-    void createRenderTargetView();
-    void createReadbackBuffer();
+    void createSwapChain(HWND windowHandle);
+    void createDescriptorHeapForSwapChain();
+    void createRenderTargetViewFromSwapChain();
     void createFence();
 
     void frameBegin();
-    void generateConstColorTexture(const float color[4]);
-    void copyTextureToReadbackBuffer();
-    void executeCommandList();
     void waitForGPU();
     void frameEnd();
 
@@ -39,6 +35,7 @@ private:
 
     static const UINT width = 800;
     static const UINT height = 600;
+    static const UINT swapChainBuffersCount = 2;
 
     ComPtr<IDXGIFactory4> factory = nullptr;
     ComPtr<IDXGIAdapter1> adapter = nullptr;
@@ -48,18 +45,18 @@ private:
     ComPtr<ID3D12CommandAllocator> commandAllocator = nullptr;
     ComPtr<ID3D12GraphicsCommandList> commandList = nullptr;
 
-    D3D12_RESOURCE_DESC texDesc = {};
-    ComPtr<ID3D12Resource> renderTarget=nullptr;
-    ComPtr<ID3D12DescriptorHeap> rtvHeap=nullptr;
-    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = {};
+    ComPtr<IDXGISwapChain3> swapChain;
+    UINT backBufferIdx = 0;
 
-    ComPtr<ID3D12Resource> readbackBuffer = nullptr;
-    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
+    ComPtr<ID3D12DescriptorHeap> rtvHeap=nullptr;
+    ComPtr<ID3D12Resource> renderTargets[swapChainBuffersCount];
+    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandles[swapChainBuffersCount] = {};
+    UINT rtvDescriptorSize = 0;
 
     ComPtr<ID3D12Fence> fence = nullptr;
     Microsoft::WRL::Wrappers::Event fenceEvent;
     UINT64 fenceValue = 1;
 
     UINT64 frameIndex = 0;
-    float rendColor[4];
+    float rendColor[4] = {0.f,0.f,0.f,1.f};
 };
