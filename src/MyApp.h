@@ -1,6 +1,5 @@
 #pragma once
 #include "QObject.h"
-#include "QImage.h"
 #include "Renderer.h"
 
 class MainWindow;
@@ -24,6 +23,5 @@ private:
 	MainWindow* mainWnd;
 	QTimer* idleTimer;
 	QTimer* fpsTimer;
-	QImage frameImage;
 	int frameIdxAtLastFPSCalc = 0;
 };
