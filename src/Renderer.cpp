@@ -1,7 +1,8 @@
 #include "Renderer.h"
 #include <iostream>
 #include <cassert>
-
+#include "CompiledShaders/ConstColor.hlsl.h"
+#include "CompiledShaders/ConstColorVS.hlsl.h"
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3d12.lib")
 
@@ -14,6 +15,10 @@ void Renderer::prepareForRendering(HWND hwnd)
 	createDescriptorHeapForSwapChain();
 	createRenderTargetViewFromSwapChain();
 	createFence();
+	createVertexBuffer();
+	createRootSignature();
+	createPipelineState();
+	createViewport();
 }
 
 void Renderer::createDevice()
@@ -115,6 +120,105 @@ void Renderer::createFence()
 	assert(fenceEvent.IsValid());
 }
 
+void Renderer::createVertexBuffer()
+{
+	Vertex triangleVertices[] =
+	{
+		{ 0.0f, 0.5f},
+		{ 0.5f, -0.5f},
+		{ -0.5f, -0.5f}
+	};
+
+	D3D12_HEAP_PROPERTIES heapProps = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+	D3D12_RESOURCE_DESC bufferDesc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(triangleVertices));
+
+	HRESULT hr = device->CreateCommittedResource(&heapProps,
+												D3D12_HEAP_FLAG_NONE,
+												&bufferDesc,
+												D3D12_RESOURCE_STATE_GENERIC_READ,
+												nullptr,
+												IID_PPV_ARGS(&vertexBuffer));
+	assert(SUCCEEDED(hr));
+
+	void* mappedData = nullptr;
+	hr = vertexBuffer->Map(0,nullptr, &mappedData);
+	assert(SUCCEEDED(hr));
+
+	memcpy(mappedData, triangleVertices, sizeof(triangleVertices));
+
+	vertexBuffer->Unmap(0, nullptr);
+
+	vertexBufferView = D3D12_VERTEX_BUFFER_VIEW();
+	vertexBufferView.BufferLocation = vertexBuffer->GetGPUVirtualAddress();
+	vertexBufferView.StrideInBytes = sizeof(Vertex);
+	vertexBufferView.SizeInBytes = sizeof(triangleVertices);
+}
+
+void Renderer::createRootSignature()
+{
+	D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
+	rootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+
+	ComPtr<ID3DBlob> signature;
+	ComPtr<ID3DBlob> error;
+	HRESULT hr = D3D12SerializeRootSignature(&rootSignatureDesc,
+											 D3D_ROOT_SIGNATURE_VERSION_1,
+											 &signature,
+											 &error
+	);
+	assert(SUCCEEDED(hr));
+
+	hr = device->CreateRootSignature(0,
+									signature->GetBufferPointer(),
+									signature->GetBufferSize(),
+									IID_PPV_ARGS(&rootSignature)
+	);
+	assert(SUCCEEDED(hr));
+}
+
+void Renderer::createPipelineState()
+{
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
+
+	D3D12_INPUT_ELEMENT_DESC inputLayout[] =
+	{
+		{ "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
+	};
+
+	psoDesc.pRootSignature = rootSignature.Get();
+	psoDesc.PS = {g_const_color, _countof(g_const_color)};
+	psoDesc.VS = {g_const_color_vs, _countof(g_const_color_vs)};
+	psoDesc.InputLayout = {inputLayout, _countof(inputLayout)};
+	psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+	psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+	psoDesc.DepthStencilState.DepthEnable = FALSE;
+	psoDesc.DepthStencilState.StencilEnable = FALSE;
+	psoDesc.SampleMask = UINT_MAX;
+	psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	psoDesc.NumRenderTargets = 1;
+	psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+	psoDesc.SampleDesc.Count = 1;
+	psoDesc.SampleDesc.Quality = 0;
+
+	const HRESULT hr = device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&pipelineState));
+	assert(SUCCEEDED(hr));
+}
+
+void Renderer::createViewport()
+{
+	viewport.TopLeftX = 0.0f;
+	viewport.TopLeftY = 0.0f;
+	viewport.Width = static_cast<float>(width);
+	viewport.Height = static_cast<float>(height);
+	viewport.MinDepth = 0.0f;
+	viewport.MaxDepth = 1.0f;
+
+	scissorRect.left = 0;
+	scissorRect.top = 0;
+	scissorRect.right = static_cast<LONG>(width);
+	scissorRect.bottom = static_cast<LONG>(height);
+}
+
 void Renderer::frameBegin()
 {
 	float frameCoef = static_cast<float>(frameIndex % 1000) / 1000.0f;
@@ -141,6 +245,17 @@ void Renderer::renderFrameWithSwapChain()
 	commandList->OMSetRenderTargets(1, &rtvHandles[backBufferIdx], FALSE, nullptr);
 	commandList->ClearRenderTargetView(rtvHandles[backBufferIdx], rendColor, 0, nullptr);
 
+	commandList->SetPipelineState(pipelineState.Get());
+	commandList->SetGraphicsRootSignature(rootSignature.Get());
+
+	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	commandList->IASetVertexBuffers(0,1,&vertexBufferView);
+
+	commandList->RSSetViewports(1,&viewport);
+	commandList->RSSetScissorRects(1,&scissorRect);
+
+	commandList->DrawInstanced(3,1,0,0);
+
 	barrier.Transition.pResource = renderTargets[backBufferIdx].Get();
 	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
 	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
@@ -150,6 +265,7 @@ void Renderer::renderFrameWithSwapChain()
 
 	ID3D12CommandList* ppCommandLists[] = {commandList.Get()};
 	commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
+
 
 	swapChain->Present(0,0);
 

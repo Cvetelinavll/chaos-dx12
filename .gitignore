@@ -83,4 +83,4 @@ bin/
 obj/
 src/qtgen/
 scripts/generated_prebuild.bat
-third_party/
+third_party/Qt6/
