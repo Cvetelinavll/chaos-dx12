@@ -9,8 +9,10 @@ DirectX 12 renderer developed during the Chaos DirectX 12 Ray Tracing Course 202
 - Qt main window with a viewport widget
 - Renders directly into the viewport through a DXGI swap chain with 2 buffers (FLIP_DISCARD)
 - Tracks the current back buffer and presents each frame after the command list executes
+- Draws a triangle with the GPU rendering pipeline: vertex buffer in an upload heap, root signature, graphics pipeline state, viewport and scissor rectangle
+- HLSL vertex and pixel shaders compiled at build time by dxc into C++ headers
+- Rotates the triangle around the center by updating the vertex buffer every frame
 - Rendering loop driven by a QTimer, running whenever the Qt event loop is idle
-- Frame color changes with the frame index: interpolates from green to red every 1000 frames
 - FPS counter in the status bar, updated every second by a separate QTimer
 - Waits for the GPU to finish before the window closes
 
@@ -33,6 +35,7 @@ lib
 plugins
 qml
 ```
+The D3D12 headers and the `d3dx12` helpers from [DirectX-Headers](https://github.com/microsoft/DirectX-Headers) are included in `third_party\d3dx12`, so they need no setup.
 
 ## Building
 
@@ -44,6 +47,7 @@ qml
 - Output: `bin\Release` or `bin\Debug`
 - Intermediate files: `obj\x64\Release` or `obj\x64\Debug`
 - The pre-build event runs Qt's moc for the classes listed in `scripts\gen_prebuild_cmd.py` and writes the results to `src\qtgen`
+- The HLSL shaders in `src\shaders` are compiled with Shader Model 6.3 into `obj\x64\<Configuration>\CompiledShaders\<Name>.hlsl.h`, which `Renderer.cpp` includes
 - The post-build event copies the Qt DLLs and the `platforms` and `styles` plugins next to the executable through `scripts\postbuild.py`
 
 When adding a new class with `Q_OBJECT`, add its header name to `moc_files` in `scripts\gen_prebuild_cmd.py`, build once, then add the generated `src\qtgen\moc_<Name>.cpp` to the project.
@@ -68,6 +72,7 @@ Prebuilt executables are available under [Releases](https://github.com/Cvetelina
 | `src/ViewportWidget.h` | Viewport widget; provides its native window handle (HWND) for the swap chain |
 | `src/Renderer.h`, `src/Renderer.cpp` | DirectX 12 renderer: device and command setup, swap chain, frame rendering and presenting, GPU synchronization |
 | `scripts/` | Build event scripts (moc, copying Qt DLLs) |
+| `third_party/d3dx12/` | D3D12 headers and `d3dx12` helpers from DirectX-Headers (MIT license) |
 | `third_party/Qt6/` | Qt 6, copied locally, not in git |
 | `bin/`, `obj/`, `src/qtgen/` | Build output and generated files, not in git |
 
@@ -82,3 +87,4 @@ Each lecture is developed in its own branch, based on the previous one. `main` a
 | `lecture-03` | v0.3 | Render target, readback buffer, fence, multiple frames; review fixes; repository restructure; Qt linked |
 | `lecture-04` | v0.4 | Qt main window, viewport, QTimer rendering loop, FPS counter |
 | `lecture-05` | v0.5 | Swap chain with 2 buffers presenting into the viewport, RTV descriptor heap, back buffer tracking |
+| `lecture-07` | v0.7 | Triangle with the GPU pipeline: vertex buffer, HLSL shaders, root signature, pipeline state, viewport; moving, checker pattern and rotating triangle |
