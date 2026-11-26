@@ -122,12 +122,28 @@ void Renderer::createFence()
 
 void Renderer::createVertexBuffer()
 {
-	Vertex triangleVertices[] =
+	Vertex triangleVertices[32 * 2 * 3];
+	int v = 0;
+	for (int row = 0; row < 8; ++row)
 	{
-		{ 0.0f, 0.5f},
-		{ 0.5f, -0.5f},
-		{ -0.5f, -0.5f}
-	};
+		for (int col = 0; col < 8; ++col)
+		{
+			if ((row + col) % 2 != 1)
+			{
+				float squareSize = 2.0f / 8.0f;
+				float x = -1.0f + col * squareSize;
+				float y = -1.0f + row * squareSize;
+
+				triangleVertices[v++] = { x, y };
+				triangleVertices[v++] = { x, y + squareSize };
+				triangleVertices[v++] = { x + squareSize, y + squareSize };
+
+				triangleVertices[v++] = { x, y };
+				triangleVertices[v++] = { x + squareSize, y + squareSize };
+				triangleVertices[v++] = { x + squareSize, y };
+			}
+		}
+	}
 
 	D3D12_HEAP_PROPERTIES heapProps = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
 	D3D12_RESOURCE_DESC bufferDesc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(triangleVertices));
@@ -221,41 +237,11 @@ void Renderer::createViewport()
 
 void Renderer::frameBegin()
 {
-	float frameCoef = static_cast<float>(frameIndex % 1000) / 1000.0f;
-
-	rendColor[0] = frameCoef;
-	rendColor[1] = 1.f - frameCoef;
-	rendColor[2] = 0.f;
-	rendColor[3] = 1.f;
-
-	float step = 1.f / 140.f;
-	xOffset += step;
-
-	if (xOffset > 1.5f)
-	{
-		xOffset = -1.5f;
-	}
-
-	Vertex triangleVertices[] =
-	{
-		{0.0f+xOffset,0.5f},
-		{0.5f+xOffset, -0.5f},
-		{-0.5f+xOffset, -0.5f}
-	};
-
-	void* pVertexData = nullptr;
-	const HRESULT hr = vertexBuffer->Map(0, nullptr, &pVertexData);
+	HRESULT hr = commandAllocator->Reset();
 	assert(SUCCEEDED(hr));
-	memcpy(pVertexData, triangleVertices, sizeof(triangleVertices));
-	vertexBuffer->Unmap(0, nullptr);
-}
 
-void Renderer::renderFrameWithSwapChain()
-{
-	frameBegin();
-
-	commandAllocator->Reset();
-	commandList->Reset(commandAllocator.Get(), nullptr);
+	hr = commandList->Reset(commandAllocator.Get(), nullptr);
+	assert(SUCCEEDED(hr));
 
 	D3D12_RESOURCE_BARRIER barrier{};
 	barrier.Transition.pResource = renderTargets[backBufferIdx].Get();
@@ -264,7 +250,15 @@ void Renderer::renderFrameWithSwapChain()
 	commandList->ResourceBarrier(1, &barrier);
 
 	commandList->OMSetRenderTargets(1, &rtvHandles[backBufferIdx], FALSE, nullptr);
-	commandList->ClearRenderTargetView(rtvHandles[backBufferIdx], rendColor, 0, nullptr);
+	commandList->ClearRenderTargetView(rtvHandles[backBufferIdx], greenColor, 0, nullptr);
+}
+
+void Renderer::renderFrameWithSwapChain()
+{
+	frameBegin();
+
+	commandAllocator->Reset();
+	commandList->Reset(commandAllocator.Get(), nullptr);
 
 	commandList->SetPipelineState(pipelineState.Get());
 	commandList->SetGraphicsRootSignature(rootSignature.Get());
@@ -275,8 +269,9 @@ void Renderer::renderFrameWithSwapChain()
 	commandList->RSSetViewports(1,&viewport);
 	commandList->RSSetScissorRects(1,&scissorRect);
 
-	commandList->DrawInstanced(3,1,0,0);
+	commandList->DrawInstanced(32*2*3,1,0,0);
 
+	D3D12_RESOURCE_BARRIER barrier{};
 	barrier.Transition.pResource = renderTargets[backBufferIdx].Get();
 	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
 	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
@@ -287,9 +282,7 @@ void Renderer::renderFrameWithSwapChain()
 	ID3D12CommandList* ppCommandLists[] = {commandList.Get()};
 	commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
 
-
 	swapChain->Present(0,0);
-
 
 	waitForGPU();
 	frameEnd();
