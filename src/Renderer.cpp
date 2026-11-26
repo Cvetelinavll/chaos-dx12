@@ -122,28 +122,12 @@ void Renderer::createFence()
 
 void Renderer::createVertexBuffer()
 {
-	Vertex triangleVertices[32 * 2 * 3];
-	int v = 0;
-	for (int row = 0; row < 8; ++row)
+	Vertex triangleVertices[] =
 	{
-		for (int col = 0; col < 8; ++col)
-		{
-			if ((row + col) % 2 != 1)
-			{
-				float squareSize = 2.0f / 8.0f;
-				float x = -1.0f + col * squareSize;
-				float y = -1.0f + row * squareSize;
-
-				triangleVertices[v++] = { x, y };
-				triangleVertices[v++] = { x, y + squareSize };
-				triangleVertices[v++] = { x + squareSize, y + squareSize };
-
-				triangleVertices[v++] = { x, y };
-				triangleVertices[v++] = { x + squareSize, y + squareSize };
-				triangleVertices[v++] = { x + squareSize, y };
-			}
-		}
-	}
+		{  0.0f,  0.5f },
+		{  0.5f, -0.5f },
+		{ -0.5f, -0.5f }
+	};
 
 	D3D12_HEAP_PROPERTIES heapProps = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
 	D3D12_RESOURCE_DESC bufferDesc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(triangleVertices));
@@ -237,7 +221,24 @@ void Renderer::createViewport()
 
 void Renderer::frameBegin()
 {
-	HRESULT hr = commandAllocator->Reset();
+	float angle = static_cast<float>(frameIndex) * 0.01f;
+	float cosA = cosf(angle);
+	float sinA = sinf(angle);
+
+	Vertex triangleVertices[] =
+	{
+		{  0.0f * cosA - 0.5f * sinA,   0.0f * sinA + 0.5f * cosA },
+		{  0.5f * cosA - -0.5f * sinA,  0.5f * sinA + -0.5f * cosA },
+		{ -0.5f * cosA - -0.5f * sinA, -0.5f * sinA + -0.5f * cosA }
+	};
+
+	void* pVertexData = nullptr;
+	HRESULT hr = vertexBuffer->Map(0, nullptr, &pVertexData);
+	assert(SUCCEEDED(hr));
+	memcpy(pVertexData, triangleVertices, sizeof(triangleVertices));
+	vertexBuffer->Unmap(0, nullptr);
+
+	hr = commandAllocator->Reset();
 	assert(SUCCEEDED(hr));
 
 	hr = commandList->Reset(commandAllocator.Get(), nullptr);
@@ -269,7 +270,7 @@ void Renderer::renderFrameWithSwapChain()
 	commandList->RSSetViewports(1,&viewport);
 	commandList->RSSetScissorRects(1,&scissorRect);
 
-	commandList->DrawInstanced(32*2*3,1,0,0);
+	commandList->DrawInstanced(3, 1, 0, 0);
 
 	D3D12_RESOURCE_BARRIER barrier{};
 	barrier.Transition.pResource = renderTargets[backBufferIdx].Get();
