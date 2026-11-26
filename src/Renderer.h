@@ -79,6 +79,8 @@ private:
     D3D12_VIEWPORT viewport = {};
     D3D12_RECT scissorRect = {};
 
+    float xOffset = 0.f;
+
     UINT64 frameIndex = 0;
     float rendColor[4] = {0.f,0.f,0.f,1.f};
 };

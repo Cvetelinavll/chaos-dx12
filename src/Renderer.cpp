@@ -227,6 +227,27 @@ void Renderer::frameBegin()
 	rendColor[1] = 1.f - frameCoef;
 	rendColor[2] = 0.f;
 	rendColor[3] = 1.f;
+
+	float step = 1.f / 140.f;
+	xOffset += step;
+
+	if (xOffset > 1.5f)
+	{
+		xOffset = -1.5f;
+	}
+
+	Vertex triangleVertices[] =
+	{
+		{0.0f+xOffset,0.5f},
+		{0.5f+xOffset, -0.5f},
+		{-0.5f+xOffset, -0.5f}
+	};
+
+	void* pVertexData = nullptr;
+	const HRESULT hr = vertexBuffer->Map(0, nullptr, &pVertexData);
+	assert(SUCCEEDED(hr));
+	memcpy(pVertexData, triangleVertices, sizeof(triangleVertices));
+	vertexBuffer->Unmap(0, nullptr);
 }
 
 void Renderer::renderFrameWithSwapChain()
